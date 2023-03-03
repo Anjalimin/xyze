@@ -11,6 +11,7 @@ import openai
 from streamlit_chat import message
 import resume_parser
 import re
+from io import BytesIO
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -63,7 +64,8 @@ def page2():
 
     add_bg_from_url()
 
-    def main():
+        def main():
+        
         resumes = st.file_uploader("Upload your Resumes and Images", type=["pdf", "docx", "jpg", 'jpeg'],
                                    accept_multiple_files=True)
         if resumes is not None:
@@ -71,28 +73,27 @@ def page2():
             for resume in resumes:
                 if resume.type in ["application/pdf",
                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
-                    with open(resume.name, "wb") as f:
-                        f.write(resume.getbuffer())
-                    # Parse the resume and display the extracted data
-                    data = resume_parser.ResumeParser(resume.name).get_extracted_data()
+                    data = ResumeParser(resume).get_extracted_data()
                     all_data.append(data)
                 else:
                     image = Image.open(resume)
                     text1 = pytesseract.image_to_string(image)
                     text = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD]+', ' ', text1)
                     document = Document()
-                    document.add_paragraph(text)
+                    document.add_paragraph(text1)
                     document.save("document.docx")
                     document = "document.docx"
-                    data = resume_parser.ResumeParser(document).get_extracted_data()
+                    data = ResumeParser(document).get_extracted_data()
                     all_data.append(data)
             df = pd.DataFrame(all_data, columns=['name', 'email', 'mobile_number', 'skills', 'degree', 'experience',
                                                  'company_names'])
             df.insert(0, "TimeStamp", datetime.now())
             df.insert(0, 'New_ID', range(1, 1 + len(df)))
-            download = st.button("download")
+            # Save the CSV content as a string
+            csv = df.to_csv(index=False)
             if 'download_state' not in st.session_state:
                 st.session_state.download_state = False
+            download = st.button("Download CSV File")
             if download or st.session_state.download_state:
                 st.session_state.download_state = True
                 if os.path.isfile("oryx.csv"):
@@ -107,6 +108,11 @@ def page2():
                             df["New_ID"] = range(last_id + 1, last_id + 1 + len(df))
                             df.to_csv(selected_file, mode='a', header=False, index=False)
                         st.write("Resume added to existing CSV file")
+
+                        # Download the CSV file
+                        csv_bytes = csv.encode()
+                        st.download_button(label="Download CSV File", data=BytesIO(csv_bytes), file_name="oryx.csv")
+
                     elif add_to_existing == "Create new":
                         new_csv_name = st.text_input("Enter the name of the new CSV file with the extension ")
                         csv_path = os.path.join(".", new_csv_name)
@@ -114,10 +120,19 @@ def page2():
                             with open(csv_path, "w") as f:
                                 df.to_csv(f, index=False)
                             st.markdown(f"New CSV file {new_csv_name} created and Resume added to it")
+
+                            # Download the CSV file
+                            csv_bytes = csv.encode()
+                            download = st.download_button("Download CSV File", data=df.to_csv().encode(),
+                                                          file_name=new_csv_name)
                         else:
                             st.warning("Enter the valid name of the new CSV file.")
                 else:
                     df.to_csv("oryx.csv", index=False)
+                    # Download the CSV file
+                    csv_bytes = csv.encode()
+                    download = st.download_button(label="Download CSV File", data=BytesIO(csv_bytes),
+                                                  file_name="oryx.csv")
             st.write(df)
 
         # ...
@@ -128,22 +143,40 @@ def page2():
 
 def page3():
     # set OpenAI API key
-    openai.api_key = "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"
+    openai.api_key = "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"
+
+    welcome_message = '''
+                <div style="background-color: #8A2BE2; color: #FFFFFF; padding: 20px; border-radius: 10px; text-align: center;">
+                  <h1>Welcome to our Chatbot! &#127881;</h1>
+                  <p>We're here to help answer any questions you may have. Just start typing and we'll do our best to provide a helpful response. &#x1F60A;</p>
+                </div>
+            '''
+    st.write(welcome_message, unsafe_allow_html=True)
 
     # define Streamlit app
     def generate_response(prompt):
-        completions = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=prompt,
-            max_tokens=1024,
-            n=1,
-            stop=None,
-            temperature=0.5,
-        )
-        message = completions.choices[0].text
+        try:
+            with st.spinner(text='Processing...'):
+                completions = openai.Completion.create(
+                    engine="text-davinci-003",
+                    prompt=prompt,
+                    max_tokens=1024,
+                    n=1,
+                    stop=None,
+                    temperature=0.5,
+                )
+            message = completions.choices[0].text
+            timestamp = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            message = f"[{timestamp}] {message}"
+            message += ' ' + emoji.emojize(':smiling_face_with_smiling_eyes:')
+        except Exception as e:
+            message = "Sorry, something went wrong. Please try again later."
+            st.write("Error: ", e)
+            st.spinner('')
         return message
 
     st.title("chatBot : Streamlit + openAI")
+
 
     # Storing the chat
     if 'generated' not in st.session_state:
@@ -153,8 +186,13 @@ def page3():
         st.session_state['past'] = []
         # run Streamlit app
 
+    # add a "Clear Chat" button
+    if st.button("Clear Chat"):
+        st.session_state['generated'] = []
+        st.session_state['past'] = []
+
     def get_text():
-        input_text = st.text_input("", key="input")
+        input_text = st.text_input("Type all your Questions here...", key="input" )
         return input_text
 
     user_input = get_text()
@@ -166,10 +204,53 @@ def page3():
         st.session_state.generated.append(output)
 
     if st.session_state['generated']:
+        chat_style = """
+        <style>
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            max-width: 600px;
+            margin: 20px auto;
+        }
+        .chat-bubble {
+            display: inline-block;
+            padding: 8px 12px;
+            margin: 4px;
+            border-radius: 20px;
+            max-width: 70%;
+            font-size: 16px;
+            line-height: 1.4;
+        }
+        .user-bubble {
+            background-color: #FFFFFF;
+            color: #000000;
+            border: 1px solid #CCCCCC;
+            align-self: flex-start;
+        }
+        .bot-bubble {
+            background-color: #008000;
+            color: #FFFFFF;
+            align-self: flex-end;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #666666;
+            margin-top: 5px;
+            text-align: right;
+        }
+        </style>
+        """
+        st.write(chat_style, unsafe_allow_html=True)
 
         for i in range(len(st.session_state['generated']) - 1, -1, -1):
-            message(st.session_state["generated"][i], key=str(i))
-            message(st.session_state['past'][i], is_user=True, key=str(i) + '_user')
+            if i > 0 and st.session_state['generated'][i - 1] != '':
+                st.write(
+                    f'<div class="chat-bubble bot-bubble">{emoji.emojize(":robot:")} {st.session_state["generated"][i]}</div>', unsafe_allow_html=True, key=str(i))
+            else:
+                st.write(
+                    f'<div class="chat-bubble bot-bubble">{emoji.emojize(":robot:")} {st.session_state["generated"][i]}</div>', unsafe_allow_html=True, key=str(i), help='The bot response')
+            st.write(
+                f'<div class="chat-bubble user-bubble">{emoji.emojize(":man:")} {st.session_state["past"][i]}</div>',  unsafe_allow_html=True, is_user=True, key=str(i) + '_user', help='The user input')
 
 
 page_names_to_funcs = {
@@ -181,4 +262,3 @@ page_names_to_funcs = {
 
 selected_page = st.sidebar.selectbox("Select a page", page_names_to_funcs.keys())
 page_names_to_funcs[selected_page]()
-
