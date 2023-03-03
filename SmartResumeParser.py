@@ -138,9 +138,8 @@ def page2():
             st.write(df)
 
             # ...
-
-        if __name__ == '__main__':
-            main()
+    if __name__ == '__main__':
+        main()
 
 def page3():
     # set OpenAI API key
