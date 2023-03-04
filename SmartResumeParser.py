@@ -144,7 +144,7 @@ def page2():
 
 def page3():
     # set OpenAI API key
-    openai.api_key = "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"
+    openai.api_key = "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"
 
     welcome_message = '''
                 <div style="background-color: #8A2BE2; color: #FFFFFF; padding: 20px; border-radius: 10px; text-align: center;">
