@@ -65,77 +65,80 @@ def page2():
     add_bg_from_url()
 
     def main():
-        resumes = st.file_uploader("Upload your Resumes and Images", type=["pdf", "docx", "jpg", 'jpeg'],
-                                   accept_multiple_files=True)
-        if resumes is not None:
-            all_data = []
-            for resume in resumes:
-                if resume.type in ["application/pdf",
-                                   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
-                    with open(resume.name, "wb") as f:
-                        f.write(resume.getbuffer())
-                    # Parse the resume and display the extracted data
-                    data = resume_parser.ResumeParser(resume.name).get_extracted_data()
-                    all_data.append(data)
-                else:
-                    image = Image.open(resume)
-                    text1 = pytesseract.image_to_string(image)
-                    text = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD]+', ' ', text1)
-                    document = Document()
-                    document.add_paragraph(text)
-                    document.save("document.docx")
-                    document = "document.docx"
-                    data = resume_parser.ResumeParser(document).get_extracted_data()
-                    all_data.append(data)
-            df = pd.DataFrame(all_data, columns=['name', 'email', 'mobile_number', 'skills', 'degree', 'experience',
-                                                 'company_names'])
-            df.insert(0, "TimeStamp", datetime.now())
-            df.insert(0, 'New_ID', range(1, 1 + len(df)))
-            # Save the CSV content as a string
-            csv = df.to_csv(index=False)
-            if 'download_state' not in st.session_state:
-                st.session_state.download_state = False
-            download = st.button("Download CSV File")
-            if download or st.session_state.download_state:
-                st.session_state.download_state = True
-                if os.path.isfile("oryx.csv"):
-                    add_to_existing = st.radio("Do you want to add to an existing file or create a new one?",
-                                               ["Add to existing", "Create new"])
-                    if add_to_existing == "Add to existing":
-                        existing_files = [file for file in os.listdir(".") if file.endswith(".csv")]
-                        selected_files = st.multiselect("Select the files to add the resume to:", existing_files)
-                        for selected_file in selected_files:
-                            existing_df = pd.read_csv(selected_file)
-                            last_id = existing_df["New_ID"].iloc[-1]
-                            df["New_ID"] = range(last_id + 1, last_id + 1 + len(df))
-                            df.to_csv(selected_file, mode='a', header=False, index=False)
-                        st.write("Resume added to existing CSV file")
-
-                        # Download the CSV file
-                        csv_bytes = csv.encode()
-                        st.download_button(label="Download CSV File", data=BytesIO(csv_bytes), file_name="oryx.csv")
-
-                    elif add_to_existing == "Create new":
-                        new_csv_name = st.text_input("Enter the name of the new CSV file with the extension ")
-                        csv_path = os.path.join(".", new_csv_name)
-                        if not os.path.exists(csv_path):
-                            with open(csv_path, "w") as f:
-                                df.to_csv(f, index=False)
-                            st.markdown(f"New CSV file {new_csv_name} created and Resume added to it")
+        with st.spinner('Uploading and processing files...'):
+            resumes = st.file_uploader("Upload your Resumes and Images", type=["pdf", "docx", "jpg", 'jpeg'],
+                                       accept_multiple_files=True)
+            progress_bar = st.progress(0)  # create a progress bar widget
+            for i, resume in enumerate(resumes):
+                all_data = []
+                for resume in resumes:
+                    if resume.type in ["application/pdf",
+                                       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
+                        with open(resume.name, "wb") as f:
+                            f.write(resume.getbuffer())
+                        # Parse the resume and display the extracted data
+                        data = resume_parser.ResumeParser(resume.name).get_extracted_data()
+                        all_data.append(data)
+                    else:
+                        image = Image.open(resume)
+                        text1 = pytesseract.image_to_string(image)
+                        text = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD]+', ' ', text1)
+                        document = Document()
+                        document.add_paragraph(text)
+                        document.save("document.docx")
+                        document = "document.docx"
+                        data = resume_parser.ResumeParser(document).get_extracted_data()
+                        all_data.append(data)
+                    progress_bar.progress((i + 1) / len(resumes))  # update the progress bar
+                df = pd.DataFrame(all_data, columns=['name', 'email', 'mobile_number', 'skills', 'degree', 'experience',
+                                                     'company_names'])
+                df.insert(0, "TimeStamp", datetime.now())
+                df.insert(0, 'New_ID', range(1, 1 + len(df)))
+                # Save the CSV content as a string
+                csv = df.to_csv(index=False)
+                if 'download_state' not in st.session_state:
+                    st.session_state.download_state = False
+                download = st.button("Download CSV File")
+                if download or st.session_state.download_state:
+                    st.session_state.download_state = True
+                    if os.path.isfile("oryx.csv"):
+                        add_to_existing = st.radio("Do you want to add to an existing file or create a new one?",
+                                                   ["Add to existing", "Create new"])
+                        if add_to_existing == "Add to existing":
+                            existing_files = [file for file in os.listdir(".") if file.endswith(".csv")]
+                            selected_files = st.multiselect("Select the files to add the resume to:", existing_files)
+                            for selected_file in selected_files:
+                                existing_df = pd.read_csv(selected_file)
+                                last_id = existing_df["New_ID"].iloc[-1]
+                                df["New_ID"] = range(last_id + 1, last_id + 1 + len(df))
+                                df.to_csv(selected_file, mode='a', header=False, index=False)
+                            st.write("Resume added to existing CSV file")
 
                             # Download the CSV file
                             csv_bytes = csv.encode()
-                            download = st.download_button("Download CSV File", data=df.to_csv().encode(),
-                                                          file_name=new_csv_name)
-                        else:
-                            st.warning("Enter the valid name of the new CSV file.")
-                else:
-                    df.to_csv("oryx.csv", index=False)
-                    # Download the CSV file
-                    csv_bytes = csv.encode()
-                    download = st.download_button(label="Download CSV File", data=BytesIO(csv_bytes),
-                                                  file_name="oryx.csv")
-            st.write(df)
+                            st.download_button(label="Download CSV File", data=BytesIO(csv_bytes), file_name="oryx.csv")
+
+                        elif add_to_existing == "Create new":
+                            new_csv_name = st.text_input("Enter the name of the new CSV file with the extension ")
+                            csv_path = os.path.join(".", new_csv_name)
+                            if not os.path.exists(csv_path):
+                                with open(csv_path, "w") as f:
+                                    df.to_csv(f, index=False)
+                                st.markdown(f"New CSV file {new_csv_name} created and Resume added to it")
+
+                                # Download the CSV file
+                                csv_bytes = csv.encode()
+                                download = st.download_button("Download CSV File", data=df.to_csv().encode(),
+                                                              file_name=new_csv_name)
+                            else:
+                                st.warning("Enter the valid name of the new CSV file.")
+                    else:
+                        df.to_csv("oryx.csv", index=False)
+                        # Download the CSV file
+
+                        download = st.download_button(label="Download CSV File", data=BytesIO(csv_bytes),
+                                                      file_name="oryx.csv")
+                st.write(df)
 
             # ...
     if __name__ == '__main__':
@@ -147,6 +150,7 @@ def page3():
 
     welcome_message = '''
                 <div style="background-color: #8A2BE2; color: #FFFFFF; padding: 20px; border-radius: 10px; text-align: center;">
+                  <img src="https://cdna.artstation.com/p/assets/images/images/047/673/434/original/puja-kumari-chatbot-1.gif?1648147657" alt="chatbot-avatar" width="650" height="350"">
                   <h1>Welcome to our Chatbot! &#127881;</h1>
                   <p>We're here to help answer any questions you may have. Just start typing and we'll do our best to provide a helpful response. &#x1F60A;</p>
                 </div>
@@ -184,11 +188,6 @@ def page3():
     if 'past' not in st.session_state:
         st.session_state['past'] = []
         # run Streamlit app
-
-    # add a "Clear Chat" button
-    if st.button("Clear Chat"):
-        st.session_state['generated'] = []
-        st.session_state['past'] = []
 
     def get_text():
         input_text = st.text_input("Type all your Questions here...", key="input")
@@ -253,7 +252,12 @@ def page3():
             st.write(
                 f'<div class="chat-bubble user-bubble">{emoji.emojize(":man:")} {st.session_state["past"][i]}</div>',
                 unsafe_allow_html=True, is_user=True, key=str(i) + '_user', help='The user input')
-
+    
+    # add a "Clear Chat" button
+    if st.button("Clear Chat"):
+        st.session_state['generated'] = []
+        st.session_state['past'] = []
+        st.session_state['index'] = 0
 
 page_names_to_funcs = {
     "About Us": main_page,
