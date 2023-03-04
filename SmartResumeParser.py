@@ -13,8 +13,6 @@ import resume_parser
 import re
 from io import BytesIO
 import emoji
-import datetime as dt
-import time
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -168,7 +166,7 @@ def page3():
                     temperature=0.5,
                 )
             message = completions.choices[0].text
-            timestamp = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             message = f"[{timestamp}] {message}"
             message += ' ' + emoji.emojize(':smiling_face_with_smiling_eyes:')
         except Exception as e:
