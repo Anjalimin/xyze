@@ -68,7 +68,8 @@ def page2():
     def main():
         resumes = st.file_uploader("Upload your Resumes and Images", type=["pdf", "docx", "jpg", 'jpeg'],
                                    accept_multiple_files=True)
-        if resumes is not None:
+        progress_bar = st.progress(0)  # create a progress bar widget
+        for i, resume in enumerate(resumes):
             all_data = []
             for resume in resumes:
                 if resume.type in ["application/pdf",
@@ -88,6 +89,7 @@ def page2():
                     document = "document.docx"
                     data = resume_parser.ResumeParser(document).get_extracted_data()
                     all_data.append(data)
+                progress_bar.progress((i + 1) / len(resumes))  # update the progress bar
             df = pd.DataFrame(all_data, columns=['name', 'email', 'mobile_number', 'skills', 'degree', 'experience',
                                                  'company_names'])
             df.insert(0, "TimeStamp", datetime.now())
